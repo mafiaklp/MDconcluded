@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SSC 2026 — Surviving Sepsis Campaign Mindmap</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+    min-height: 100vh;
+    color: #fff;
+    overflow-x: hidden;
+  }
+  .header {
+    text-align: center;
+    padding: 28px 20px 14px;
+  }
+  .header h1 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .header p {
+    font-size: 0.85rem;
+    color: #a0c4d8;
+    margin-top: 6px;
+  }
+  .badge {
+    display: inline-block;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── CENTER NODE ── */
+  .mindmap-container {
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 10px 20px 40px;
+  }
+  .center-node {
+    width: 170px;
+    height: 170px;
+    background: radial-gradient(circle, #e74c3c, #c0392b);
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    margin: 0 auto 30px;
+    box-shadow: 0 0 40px rgba(231,76,60,0.5);
+    padding: 12px;
+    position: relative;
+    z-index: 10;
+  }
+  .center-node .icon { font-size: 2.2rem; }
+  .center-node .label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-top: 4px;
+    line-height: 1.3;
+    color: #fff;
+  }
+  .center-node .sub {
+    font-size: 0.63rem;
+    color: #ffcdd2;
+    margin-top: 3px;
+  }
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+  }
+  .stat-chip {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    padding: 10px 18px;
+    text-align: center;
+  }
+  .stat-chip .num { font-size: 1.4rem; font-weight: 800; color: #f39c12; }
+  .stat-chip .lbl { font-size: 0.68rem; color: #a0c4d8; margin-top: 2px; }
+
+  /* ── DOMAIN CARDS GRID ── */
+  .domains-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 10px;
+  }
+  .domain-card {
+    background: rgba(255,255,255,0.07);
+    border: 1.5px solid;
+    border-radius: 14px;
+    padding: 16px;
+    transition: transform 0.2s, background 0.2s;
+    cursor: default;
+  }
+  .domain-card:hover {
+    transform: translateY(-4px);
+    background: rgba(255,255,255,0.12);
+  }
+  .domain-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .domain-icon {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+  }
+  .domain-title { font-size: 0.88rem; font-weight: 700; line-height: 1.3; }
+  .domain-num { font-size: 0.65rem; opacity: 0.7; margin-top: 2px; }
+  .bullets { list-style: none; }
+  .bullets li {
+    font-size: 0.72rem;
+    color: #d0e8f4;
+    padding: 4px 0 4px 14px;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    line-height: 1.4;
+  }
+  .bullets li:last-child { border-bottom: none; }
+  .bullets li::before {
+    content: '▸';
+    position: absolute; left: 0;
+    opacity: 0.7;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .tag-new { background: #27ae60; color: #fff; }
+  .tag-rev { background: #2980b9; color: #fff; }
+  .tag-strong { background: #8e44ad; color: #fff; }
+  .tag-against { background: #c0392b; color: #fff; }
+
+  /* Domain color themes */
+  .d1 { border-color: #3498db; } .d1 .domain-icon { background: #3498db22; color: #3498db; }
+  .d2 { border-color: #e74c3c; } .d2 .domain-icon { background: #e74c3c22; color: #e74c3c; }
+  .d3 { border-color: #e67e22; } .d3 .domain-icon { background: #e67e2222; color: #e67e22; }
+  .d4 { border-color: #1abc9c; } .d4 .domain-icon { background: #1abc9c22; color: #1abc9c; }
+  .d5 { border-color: #9b59b6; } .d5 .domain-icon { background: #9b59b622; color: #9b59b6; }
+  .d6 { border-color: #f39c12; } .d6 .domain-icon { background: #f39c1222; color: #f39c12; }
+  .d7 { border-color: #16a085; } .d7 .domain-icon { background: #16a08522; color: #16a085; }
+  .d8 { border-color: #8e44ad; } .d8 .domain-icon { background: #8e44ad22; color: #8e44ad; }
+
+  /* ── KEY SHIFTS ── */
+  .shifts-section {
+    margin-top: 30px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 20px 24px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .shifts-section h2 {
+    font-size: 1rem;
+    color: #f39c12;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .shifts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .shift-item {
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 10px 12px;
+    border-left: 3px solid #f39c12;
+    font-size: 0.72rem;
+    color: #d0e8f4;
+    line-height: 1.5;
+  }
+  .shift-item strong { color: #f1c40f; }
+
+  /* ── THINKING FLOW ── */
+  .flow-section {
+    margin-top: 30px;
+  }
+  .flow-section h2 {
+    font-size: 1rem;
+    color: #1abc9c;
+    text-align: center;
+    margin-bottom: 18px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+  }
+  .flow-circle {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-size: 1.3rem;
+    font-weight: 700;
+    border: 2px solid;
+    position: relative;
+    z-index: 2;
+  }
+  .flow-circle .step-num {
+    font-size: 0.6rem;
+    font-weight: 400;
+    opacity: 0.8;
+    margin-top: 2px;
+  }
+  .flow-label {
+    font-size: 0.65rem;
+    color: #a0c4d8;
+    margin-top: 6px;
+    max-width: 90px;
+    line-height: 1.4;
+  }
+  .flow-arrow {
+    font-size: 1.4rem;
+    color: rgba(255,255,255,0.3);
+    padding: 0 6px;
+    align-self: flex-start;
+    margin-top: 27px;
+    flex-shrink: 0;
+  }
+  .fc1 { background: #3498db22; border-color: #3498db; color: #3498db; }
+  .fc2 { background: #e74c3c22; border-color: #e74c3c; color: #e74c3c; }
+  .fc3 { background: #e67e2222; border-color: #e67e22; color: #e67e22; }
+  .fc4 { background: #1abc9c22; border-color: #1abc9c; color: #1abc9c; }
+  .fc5 { background: #9b59b622; border-color: #9b59b6; color: #9b59b6; }
+  .fc6 { background: #f39c1222; border-color: #f39c12; color: #f39c12; }
+  .fc7 { background: #16a08522; border-color: #16a085; color: #16a085; }
+
+  footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.35);
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧬 Surviving Sepsis Campaign 2026</h1>
+  <p>International Guidelines for Management of Sepsis &amp; Septic Shock</p>
+  <span class="badge">Prescott HC et al. — Intensive Care Med (2026)</span>
+</div>
+
+<div class="mindmap-container">
+
+  <!-- Center Node -->
+  <div class="center-node">
+    <div class="icon">🩺</div>
+    <div class="label">SEPSIS &amp;<br>SEPTIC SHOCK</div>
+    <div class="sub">SSC 2026</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-chip"><div class="num">123</div><div class="lbl">Statements</div></div>
+    <div class="stat-chip"><div class="num">8</div><div class="lbl">Clinical Domains</div></div>
+    <div class="stat-chip"><div class="num">69</div><div class="lbl">Panel Members</div></div>
+    <div class="stat-chip"><div class="num">23</div><div class="lbl">Countries</div></div>
+    <div class="stat-chip"><div class="num">49M</div><div class="lbl">Cases/year</div></div>
+    <div class="stat-chip"><div class="num">13M</div><div class="lbl">Deaths/year</div></div>
+  </div>
+
+  <!-- Domain Cards -->
+  <div class="domains-grid">
+
+    <!-- D1: Screening -->
+    <div class="domain-card d1">
+      <div class="domain-header">
+        <div class="domain-icon">🔍</div>
+        <div>
+          <div class="domain-title">Screening &amp; Early Management</div>
+          <div class="domain-num">Statements 1–15</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Performance improvement programs &amp; QI strategies <span class="tag tag-strong">STRONG</span></li>
+        <li>"Code Sepsis" / Sepsis Huddle protocol <span class="tag tag-new">NEW</span></li>
+        <li>NEWS / NEWS2 / MEWS / SIRS over qSOFA <span class="tag tag-rev">REVISED</span></li>
+        <li>Sepsis is clinical — no single biomarker rules it in/out</li>
+        <li>Blood cultures before antimicrobials (if feasible)</li>
+        <li>Blood lactate measurement in shock</li>
+        <li>≥30 mL/kg IV crystalloid in first 3 hours</li>
+        <li>Early vasopressor if hypotension persists</li>
+        <li>ICU admission within 6 hours if indicated</li>
+      </ul>
+    </div>
+
+    <!-- D2: Infection -->
+    <div class="domain-card d2">
+      <div class="domain-header">
+        <div class="domain-icon">💊</div>
+        <div>
+          <div class="domain-title">Infection Management</div>
+          <div class="domain-num">Statements 16–41</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Antibiotics within 1 h for septic shock <span class="tag tag-strong">STRONG</span></li>
+        <li>Antibiotics within 1 h for probable sepsis without shock <span class="tag tag-rev">REVISED</span></li>
+        <li>Empirical MDR coverage when high-risk factors present</li>
+        <li>Antifungal therapy in high-risk patients</li>
+        <li>Prolonged beta-lactam infusion (maintenance) <span class="tag tag-rev">REVISED</span></li>
+        <li>Daily de-escalation assessment <span class="tag tag-strong">STRONG</span></li>
+        <li>Antimicrobial TDM in selected patients</li>
+        <li>Selective digestive decontamination (SDD) in LMV settings</li>
+        <li>Source control — early identification and intervention</li>
+      </ul>
+    </div>
+
+    <!-- D3: Hemodynamics -->
+    <div class="domain-card d3">
+      <div class="domain-header">
+        <div class="domain-icon">❤️</div>
+        <div>
+          <div class="domain-title">Hemodynamic Management</div>
+          <div class="domain-num">Statements 42–64</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Balanced crystalloids over 0.9% normal saline <span class="tag tag-rev">REVISED</span></li>
+        <li>No starches, no gelatin <span class="tag tag-against">AGAINST</span></li>
+        <li>Norepinephrine — first-line vasopressor <span class="tag tag-strong">STRONG</span></li>
+        <li>Peripheral vasopressors — start early, before central line <span class="tag tag-rev">REVISED</span></li>
+        <li>MAP target ≥65 mmHg (initial) <span class="tag tag-strong">STRONG</span></li>
+        <li>MAP 60–65 mmHg for patients ≥65 years <span class="tag tag-new">NEW</span></li>
+        <li>Vasopressin added if norepinephrine escalating</li>
+        <li>IV corticosteroids for ongoing vasopressor requirement</li>
+        <li>No terlipressin <span class="tag tag-against">AGAINST</span></li>
+      </ul>
+    </div>
+
+    <!-- D4: Respiratory -->
+    <div class="domain-card d4">
+      <div class="domain-header">
+        <div class="domain-icon">🫁</div>
+        <div>
+          <div class="domain-title">Respiratory Support</div>
+          <div class="domain-num">Statements 65–78</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>SpO₂ 90–95% target for hypoxemic respiratory failure</li>
+        <li>HFNC over conventional O₂ therapy <span class="tag tag-rev">REVISED</span></li>
+        <li>HFNC as initial therapy over NIPPV</li>
+        <li>Awake prone positioning for non-intubated patients</li>
+        <li>Low tidal volume 6 mL/kg IBW for ARDS <span class="tag tag-strong">STRONG</span></li>
+        <li>Plateau pressure ≤30 cmH₂O <span class="tag tag-strong">STRONG</span></li>
+        <li>Prone positioning &gt;12 h/day in moderate-severe ARDS</li>
+        <li>No incremental PEEP titration strategy <span class="tag tag-against">AGAINST</span></li>
+        <li>Intermittent NMBA boluses over continuous infusion</li>
+        <li>VV-ECMO when conventional MV fails (experienced centers)</li>
+      </ul>
+    </div>
+
+    <!-- D5: Adjunctive -->
+    <div class="domain-card d5">
+      <div class="domain-header">
+        <div class="domain-icon">💉</div>
+        <div>
+          <div class="domain-title">Adjunctive Therapies</div>
+          <div class="domain-num">Statements 79–99</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>IV corticosteroids in refractory shock</li>
+        <li>No antipyretics for fever alone <span class="tag tag-against">AGAINST</span></li>
+        <li>No IV Vitamin C <span class="tag tag-against">AGAINST</span></li>
+        <li>No IV immunoglobulins <span class="tag tag-against">AGAINST</span></li>
+        <li>No blood purification / hemoperfusion <span class="tag tag-against">AGAINST</span></li>
+        <li>No Vitamin D therapy <span class="tag tag-against">AGAINST</span></li>
+        <li>Stress ulcer prophylaxis with PPIs (if GI bleed risk)</li>
+        <li>Active fluid removal after resuscitation phase</li>
+        <li>Restrictive transfusion strategy (Hb ≥70 g/L) <span class="tag tag-strong">STRONG</span></li>
+        <li>Insulin — glucose ≤180 mg/dL <span class="tag tag-strong">STRONG</span></li>
+        <li>Early enteral nutrition within 72 hours</li>
+        <li>LMWH for VTE prophylaxis <span class="tag tag-strong">STRONG</span></li>
+      </ul>
+    </div>
+
+    <!-- D6: Goals of Care -->
+    <div class="domain-card d6">
+      <div class="domain-header">
+        <div class="domain-icon">🤝</div>
+        <div>
+          <div class="domain-title">Goals of Care</div>
+          <div class="domain-num">Statements 100–107</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Discuss goals of care with patients &amp; families <span class="tag tag-strong">STRONG</span></li>
+        <li>Address goals early — within 72 hours</li>
+        <li>Integrate palliative care principles into treatment plan</li>
+        <li>Time-limited trials (TLT) useful when prognosis uncertain</li>
+        <li>Routine formal palliative care consult for all — not recommended <span class="tag tag-against">AGAINST</span></li>
+        <li>Shared decision-making with families post-ICU</li>
+      </ul>
+    </div>
+
+    <!-- D7: Transitions -->
+    <div class="domain-card d7">
+      <div class="domain-header">
+        <div class="domain-icon">🔄</div>
+        <div>
+          <div class="domain-title">Transitions of Care</div>
+          <div class="domain-num">Statements 108–123</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Critical care transition programs on ICU transfer <span class="tag tag-new">NEW</span></li>
+        <li>Structured handoff at all transitions</li>
+        <li>Pharmacist-led medication reconciliation</li>
+        <li>Screen for social, nutritional, financial support needs</li>
+        <li>Written &amp; verbal sepsis education at discharge <span class="tag tag-new">NEW</span></li>
+        <li>Clinician training to support survivors post-hospital</li>
+      </ul>
+    </div>
+
+    <!-- D8: Long-term -->
+    <div class="domain-card d8">
+      <div class="domain-header">
+        <div class="domain-icon">🌱</div>
+        <div>
+          <div class="domain-title">Long-term Outcomes &amp; Recovery</div>
+          <div class="domain-num">Statements 124–129</div>
+        </div>
+      </div>
+      <ul class="bullets">
+        <li>Post-ICU follow-up services for all survivors <span class="tag tag-new">NEW</span></li>
+        <li>Physical rehabilitation after prolonged MV <span class="tag tag-rev">REVISED</span></li>
+        <li>Mental health support services after discharge</li>
+        <li>Refer to appropriate professionals for cognitive/psychiatric impairment</li>
+        <li>Health systems facilitate physical, cognitive &amp; emotional assessment</li>
+        <li>Insufficient evidence for cognition-targeted therapies</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- Key Shifts from 2021 -->
+  <div class="shifts-section">
+    <h2>⚡ Key Shifts from SSC 2021</h2>
+    <div class="shifts-grid">
+      <div class="shift-item"><strong>Screening:</strong> NEWS/NEWS2 now favored over qSOFA for in-hospital sepsis screening</div>
+      <div class="shift-item"><strong>Code Sepsis:</strong> New conditional recommendation for multidisciplinary code sepsis protocols</div>
+      <div class="shift-item"><strong>Vasopressors:</strong> Peripheral initiation now conditionally suggested before central access is secured</div>
+      <div class="shift-item"><strong>MAP Target:</strong> New 60–65 mmHg target for elderly patients (≥65 years) added</div>
+      <div class="shift-item"><strong>Beta-lactams:</strong> Prolonged infusion now recommended for maintenance (not just bolus)</div>
+      <div class="shift-item"><strong>Vitamin C:</strong> IV Vitamin C is now formally recommended AGAINST</div>
+      <div class="shift-item"><strong>Blood Purification:</strong> Hemoperfusion, high-dose hemofiltration now recommended AGAINST</div>
+      <div class="shift-item"><strong>PEEP:</strong> Incremental PEEP titration now recommended AGAINST in moderate-severe ARDS</div>
+      <div class="shift-item"><strong>Recovery:</strong> New domains for transitions of care and long-term post-sepsis outcomes</div>
+      <div class="shift-item"><strong>LMIC:</strong> 38% of panelists from LMICs — strongest global equity emphasis to date</div>
+    </div>
+  </div>
+
+  <!-- Thinking Flow -->
+  <div class="flow-section">
+    <h2>🧠 Clinical Thinking Flow — Sepsis Management</h2>
+    <div class="flow-row">
+      <div class="flow-step">
+        <div class="flow-circle fc1">🔍<div class="step-num">Step 1</div></div>
+        <div class="flow-label">Screen &amp; Identify<br>(NEWS/NEWS2)</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc2">🧪<div class="step-num">Step 2</div></div>
+        <div class="flow-label">Blood Cultures<br>+ Lactate</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc3">💊<div class="step-num">Step 3</div></div>
+        <div class="flow-label">Antibiotics<br>within 1 hour</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc4">💧<div class="step-num">Step 4</div></div>
+        <div class="flow-label">IV Fluid<br>≥30 mL/kg</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc1">❤️<div class="step-num">Step 5</div></div>
+        <div class="flow-label">Vasopressors<br>MAP ≥65 mmHg</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc5">🫁<div class="step-num">Step 6</div></div>
+        <div class="flow-label">Respiratory<br>Support</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc6">📉<div class="step-num">Step 7</div></div>
+        <div class="flow-label">De-escalate<br>Reassess Daily</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle fc7">🌱<div class="step-num">Step 8</div></div>
+        <div class="flow-label">Recovery &amp;<br>Follow-up</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  SSC 2026 Guidelines · Prescott HC et al., Intensive Care Med · DOI: 10.1007/s00134-026-08361-1<br>
+  © 2026 ESICM and SCCM · Generated for Medical Research
+</footer>
+
+</body>
+</html>
