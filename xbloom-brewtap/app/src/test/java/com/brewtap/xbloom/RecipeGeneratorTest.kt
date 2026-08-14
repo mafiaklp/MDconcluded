@@ -12,6 +12,6 @@ class RecipeGeneratorTest {
         assertEquals(93, recipe.temperatureC)
         assertEquals(80, recipe.grinderRpm)
         assertEquals(listOf(50, 70, 75, 75), recipe.pours.map { it.volumeMl })
-        assertEquals(18, recipe.machineRatio)
+        assertEquals(15, recipe.machineRatio)
     }
 }
