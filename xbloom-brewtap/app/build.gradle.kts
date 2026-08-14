@@ -1,6 +1,15 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val signingSource = rootProject.file("signing/brewtap-test.keystore.b64")
+val stableKeystore = layout.buildDirectory.file("brewtap-test.keystore").get().asFile
+if (!stableKeystore.exists()) {
+    stableKeystore.parentFile.mkdirs()
+    stableKeystore.writeBytes(Base64.getDecoder().decode(signingSource.readText().trim()))
 }
 
 android {
@@ -11,12 +20,25 @@ android {
         applicationId = "com.brewtap.xbloom"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "1.3.1"
+        versionCode = 40
+        versionName = "1.4.0"
+    }
+
+    signingConfigs {
+        create("stableDevelopment") {
+            storeFile = stableKeystore
+            storePassword = "brewtap2026"
+            keyAlias = "brewtap"
+            keyPassword = "brewtap2026"
+        }
     }
 
     buildTypes {
-        release { isMinifyEnabled = false }
+        debug { signingConfig = signingConfigs.getByName("stableDevelopment") }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("stableDevelopment")
+        }
     }
 
     compileOptions {
