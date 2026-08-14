@@ -21,8 +21,13 @@ data class BrewRecipe(
     val grinderRpm: Int,
     val temperatureC: Int,
     val pours: List<BrewPour>,
-    val cupType: Int = 2,
+    val cupType: Int = 0,
 ) {
     val displayedRatio: Double get() = totalWaterMl.toDouble() / doseGrams.toDouble()
-    val machineRatio: Int get() = kotlin.math.round(totalWaterMl / 15.0).toInt()
+    val machineRatio: Int get() {
+        require(doseGrams > 0) { "dose must be positive" }
+        val ratio = totalWaterMl.toDouble() / doseGrams.toDouble()
+        require(kotlin.math.abs(ratio - kotlin.math.round(ratio)) < 0.001) { "xBloom card ratio must be an integer" }
+        return kotlin.math.round(ratio).toInt()
+    }
 }
