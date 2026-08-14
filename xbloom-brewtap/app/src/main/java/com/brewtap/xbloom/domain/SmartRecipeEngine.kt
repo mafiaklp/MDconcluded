@@ -36,25 +36,23 @@ object SmartRecipeEngine {
             RoastLevel.UNKNOWN -> 59
         }.coerceIn(41, 80)
 
-        val ratio = when (profile.roastLevel) {
-            RoastLevel.LIGHT -> if (washed) 16.0 else 15.5
-            RoastLevel.MEDIUM_LIGHT -> 15.5
-            RoastLevel.MEDIUM -> 15.0
-            RoastLevel.MEDIUM_DARK -> 14.5
-            RoastLevel.DARK -> 14.0
-            RoastLevel.UNKNOWN -> 15.0
+        // xBloom stores ratio as one integer byte, so recommended recipes intentionally use whole ratios.
+        val beverageRatio = when (profile.roastLevel) {
+            RoastLevel.LIGHT -> if (washed) 16 else 15
+            RoastLevel.MEDIUM_LIGHT -> 15
+            RoastLevel.MEDIUM -> 15
+            RoastLevel.MEDIUM_DARK -> 14
+            RoastLevel.DARK -> 14
+            RoastLevel.UNKNOWN -> 15
         }
 
         val dose = intent.doseGrams
-        val targetBeverage = (dose * ratio).roundToInt()
+        val targetBeverage = dose * beverageRatio
         val icedSplit = if (intent.mode == BrewMode.ICED) {
-            val iceFraction = when {
-                floral || fruit -> 0.34
-                profile.roastLevel >= RoastLevel.MEDIUM -> 0.30
-                else -> 0.32
-            }
-            val ice = (targetBeverage * iceFraction).roundToInt()
-            IcedSplit(targetBeverage - ice, ice, targetBeverage)
+            // Competition-style bypass: make the xBloom hot phase itself an integer-ratio recipe.
+            val brewRatio = if (beverageRatio >= 16) 11 else 10
+            val brewWater = dose * brewRatio
+            IcedSplit(brewWater, targetBeverage - brewWater, targetBeverage)
         } else null
 
         val brewWater = icedSplit?.brewWaterMl ?: targetBeverage
@@ -129,10 +127,7 @@ object SmartRecipeEngine {
                     else -> 34
                 },
                 pattern = if (i == 0 && controlled) PourPattern.CENTERED else PourPattern.SPIRAL,
-                agitation = when {
-                    i == 0 && !controlled -> 1
-                    else -> 0
-                },
+                agitation = if (i == 0 && !controlled) 1 else 0,
                 pauseSeconds = when {
                     i == 0 -> if (clarityBias) 35 else 30
                     i < count - 1 -> if (controlled) 12 else 8
@@ -182,7 +177,7 @@ object SmartRecipeEngine {
         val top = scores.entries.sortedByDescending { it.value }.take(2).map { it.key }
         val bodyText = when { c(body) >= 8 -> "full body"; c(body) >= 6 -> "silky medium body"; else -> "light clean body" }
         val finish = if (c(clarity) >= 7) "clean finish" else "sweet lingering finish"
-        val summary = "${top.joinToString(" and ") { it.replaceFirstChar(Char::uppercase) }} forward, $bodyText, $finish."
+        val summary = "${top.joinToString(" and ") { it.replaceFirstChar { ch -> ch.uppercase() } }} forward, $bodyText, $finish."
 
         return ExpectedCup(c(acidity), c(sweetness), c(body), c(clarity), c(floral), c(fruit), c(bitterness), summary)
     }
