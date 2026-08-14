@@ -1,41 +1,33 @@
 package com.brewtap.xbloom
 
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class XBloomBleProtocolTest {
-    @Test
-    fun easyModeReferencePacketMatchesKnownVector() {
-        val packet = XBloomBleProtocol.buildType2(11511, byteArrayOf(0x91.toByte(), 0x32, 0x78, 0x56))
-        assertEquals("580102f72c100000000191327856ff58", packet.toHex())
+    @Test fun frameMatchesCapturedCommitVector() {
+        val packet = XBloomBleProtocol.frame(0x42, 0x1F, byteArrayOf(0x01))
+        assertEquals("580101421f0c000000017fcf", packet.toHex())
     }
 
-    @Test
-    fun handshakeUsesKnownCommandAndPayload() {
-        val packet = XBloomBleProtocol.buildHandshake()
-        assertEquals(8100, XBloomBleProtocol.commandCode(packet))
-        assertTrue(packet.size >= 20)
-        assertArrayEquals(byteArrayOf(0xB9.toByte(), 0, 0, 0, 1, 0, 0, 0), packet.copyOfRange(10, 18))
+    @Test fun doseFrameCarriesRequestedDose() {
+        val packet = XBloomBleProtocol.dose(15)
+        assertEquals(0xA6, packet[3].toInt() and 0xff)
+        assertEquals(15, packet[18].toInt() and 0xff)
     }
 
-    @Test
-    fun edisonRecipeUsesGrinderDirectCommand() {
-        val recipe = RecipeGenerator.edisonEthiopia()
-        val packet = XBloomBleProtocol.buildDirectRecipePacket(recipe)
-        assertEquals(8001, XBloomBleProtocol.commandCode(packet))
-        assertEquals(0x58, packet[0].toInt() and 0xFF)
-        assertEquals(0x01, packet[2].toInt() and 0xFF)
+    @Test fun loadFramesNeverContainStartOpcodes() {
+        val recipe = RecipeGenerator.edisonEthiopia().copy(doseGrams = 15)
+        val frames = XBloomBleProtocol.loadFrames(recipe)
+        assertEquals(listOf(0xA4,0xA6,0xA8,0x41), frames.map { it[3].toInt() and 0xff })
+        assertFalse(frames.any { (it[3].toInt() and 0xff) in setOf(0x42,0x46,0x47) })
     }
 
-    @Test
-    fun recipeBlobCarriesRatioAndGrinderTail() {
-        val recipe = RecipeGenerator.edisonEthiopia()
-        val blob = XBloomBleProtocol.encodeRecipe(recipe)
-        assertEquals(recipe.grindSize, blob[blob.size - 2].toInt() and 0xFF)
-        assertEquals(150, blob[blob.size - 1].toInt() and 0xFF)
+    @Test fun armedStatusIsDetected() {
+        val raw = byteArrayOf(0x58,0x02,0x07,0x57,0,0,0,0,0,0xC1.toByte(),0x1F,0,0)
+        assertTrue(XBloomBleProtocol.isArmedNotification(raw))
     }
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+    private fun ByteArray.toHex() = joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
