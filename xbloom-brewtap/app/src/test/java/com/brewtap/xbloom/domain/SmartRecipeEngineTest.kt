@@ -19,10 +19,14 @@ class SmartRecipeEngineTest {
         assertTrue(CoffeeProfile(name = "Test", roastLevel = RoastLevel.LIGHT).isGeneratable())
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun icedSplitRequiresMassBalance() {
-        IcedSplit(180, 80, 270)
+    @Test fun defaultDoseIs15gButExplicitDoseIsPreserved() {
+        assertEquals(15, RecipeIntent(BrewMode.HOT).doseGrams)
+        val custom = SmartRecipeEngine.generate(floralWashed, RecipeIntent(BrewMode.HOT, doseGrams = 18))
+        assertEquals(18, custom.recipe.doseGrams)
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun icedSplitRequiresMassBalance() { IcedSplit(180, 80, 270) }
 
     @Test fun washedLightCoffeeGetsClarityBiasedHotRecipe() {
         val g = SmartRecipeEngine.generate(floralWashed, RecipeIntent(BrewMode.HOT, doseGrams = 18))
