@@ -1,15 +1,6 @@
-import java.util.Base64
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-}
-
-val signingSource = rootProject.file("signing/brewtap-test.keystore.b64")
-val stableKeystore = layout.buildDirectory.file("brewtap-test.keystore").get().asFile
-if (!stableKeystore.exists()) {
-    stableKeystore.parentFile.mkdirs()
-    stableKeystore.writeBytes(Base64.getDecoder().decode(signingSource.readText().trim()))
 }
 
 android {
@@ -26,7 +17,7 @@ android {
 
     signingConfigs {
         create("stableDevelopment") {
-            storeFile = stableKeystore
+            storeFile = rootProject.file("signing/brewtap-test.keystore")
             storePassword = "brewtap2026"
             keyAlias = "brewtap"
             keyPassword = "brewtap2026"
