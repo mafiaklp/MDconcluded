@@ -5,6 +5,8 @@ on:
   push:
     branches: [ "main", "feature/xbloom-brewtap-apk" ]
     paths: [ "xbloom-brewtap/**", ".github/workflows/xbloom-brewtap-android.yml" ]
+  issues:
+    types: [opened]
 
 jobs:
   build:
