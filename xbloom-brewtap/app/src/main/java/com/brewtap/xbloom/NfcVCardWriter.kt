@@ -19,15 +19,18 @@ class NfcVCardWriter {
             require(system.blockSize == 4) { "Unsupported block size ${system.blockSize}; expected 4 bytes" }
             require(system.blockCount > 19) { "Card is too small (${system.blockCount} blocks)" }
 
+            val signature = readBytes(tech, uid, startBlock = 0, blockCount = 8)
+            require(signature.size == 32) { "Could not read 32-byte xBloom signature" }
             val xid = readBytes(tech, uid, startBlock = 8, blockCount = 2).copyOfRange(0, 7)
-            val payload = XBloomRecipeEncoder.encodePayload(recipe, xid)
+            val payload = XBloomRecipeEncoder.encodePayloadForCard(recipe, xid, signature)
             require(payload.size % system.blockSize == 0) { "Payload must align to ${system.blockSize}-byte blocks" }
 
             writeBytes(tech, uid, startBlock = 8, payload = payload, blockSize = system.blockSize)
             val verified = readBytes(tech, uid, startBlock = 8, blockCount = payload.size / system.blockSize)
-            if (!verified.contentEquals(payload)) {
-                throw IOException("Verification failed: card bytes differ after write")
-            }
+            if (!verified.contentEquals(payload)) throw IOException("Verification failed: card bytes differ after write")
+            val signatureAfter = readBytes(tech, uid, startBlock = 0, blockCount = 8)
+            if (!signatureAfter.contentEquals(signature)) throw IOException("Safety check failed: card signature changed")
+
             return WriteResult(uid.joinToString("") { "%02X".format(it.toInt() and 0xFF) }, verified.size)
         } finally {
             try { tech.close() } catch (_: Exception) { }
@@ -38,9 +41,7 @@ class NfcVCardWriter {
 
     private fun getSystemInfo(tech: NfcV, uid: ByteArray): SystemInfo {
         val response = tech.transceive(byteArrayOf(0x22, 0x2B, *uid))
-        if (response.isEmpty() || response[0].toInt() != 0x00) {
-            throw IOException("ISO15693 Get System Information failed")
-        }
+        if (response.isEmpty() || response[0].toInt() != 0x00) throw IOException("ISO15693 Get System Information failed")
         if (response.size < 14) throw IOException("Unexpected system information length ${response.size}")
         val blockCount = (response[12].toInt() and 0xFF) + 1
         val blockSize = (response[13].toInt() and 0x1F) + 1
@@ -52,9 +53,7 @@ class NfcVCardWriter {
         repeat(blockCount) { offset ->
             val block = startBlock + offset
             val response = tech.transceive(byteArrayOf(0x22, 0x20, *uid, block.toByte()))
-            if (response.isEmpty() || response[0].toInt() != 0x00) {
-                throw IOException("Read failed at block $block")
-            }
+            if (response.isEmpty() || response[0].toInt() != 0x00) throw IOException("Read failed at block $block")
             for (i in 1 until response.size) out.add(response[i])
         }
         return out.toByteArray()
@@ -72,9 +71,7 @@ class NfcVCardWriter {
             command[2 + uid.size] = block.toByte()
             chunk.copyInto(command, destinationOffset = 3 + uid.size)
             val response = tech.transceive(command)
-            if (response.isEmpty() || response[0].toInt() != 0x00) {
-                throw IOException("Write failed at block $block")
-            }
+            if (response.isEmpty() || response[0].toInt() != 0x00) throw IOException("Write failed at block $block")
             cursor += blockSize
             block++
         }
