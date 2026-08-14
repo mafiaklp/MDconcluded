@@ -3,7 +3,7 @@ name: Build BrewTap Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "feature/xbloom-brewtap-apk" ]
+    branches: [ "main", "feature/xbloom-brewtap-apk" ]
     paths: [ "xbloom-brewtap/**", ".github/workflows/xbloom-brewtap-android.yml" ]
 
 jobs:
