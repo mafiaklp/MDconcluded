@@ -11,8 +11,8 @@ android {
         applicationId = "com.brewtap.xbloom"
         minSdk = 26
         targetSdk = 35
-        versionCode = 40
-        versionName = "1.4.0"
+        versionCode = 50
+        versionName = "1.5.0"
     }
 
     signingConfigs {
