@@ -6,8 +6,9 @@ object XBloomCardImage {
 
     fun applyRecipe(originalCard: ByteArray, recipe: BrewRecipe): ByteArray {
         require(originalCard.size >= RECIPE_OFFSET + XID_SIZE) { "card image is too small" }
+        val signature = originalCard.copyOfRange(0, RECIPE_OFFSET)
         val xid = originalCard.copyOfRange(RECIPE_OFFSET, RECIPE_OFFSET + XID_SIZE)
-        val payload = XBloomRecipeEncoder.encodePayload(recipe, xid)
+        val payload = XBloomRecipeEncoder.encodePayloadForCard(recipe, xid, signature)
         require(RECIPE_OFFSET + payload.size <= originalCard.size) { "recipe does not fit card image" }
         return originalCard.copyOf().also { out ->
             payload.copyInto(out, RECIPE_OFFSET)
