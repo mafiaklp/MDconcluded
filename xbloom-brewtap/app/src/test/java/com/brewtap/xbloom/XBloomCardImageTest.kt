@@ -5,6 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class XBloomCardImageTest {
+    private val signature = hex(
+        "5F 01 1D 79 56 BA 02 04 4F 5F 15 93 A7 15 AF 2C " +
+        "71 8D 87 FD 0E 2C 3B 36 BF 30 AC 16 6A D9 D0 F1"
+    )
     private val sampleRecipe = BrewRecipe(
         name = "TH0035 sample",
         doseGrams = 15,
@@ -30,20 +34,19 @@ class XBloomCardImageTest {
             "28 5A 00 00 FB 00 00 1E " +
             "0F 0F 11"
         )
-        assertArrayEquals(expected, XBloomRecipeEncoder.encodePayload(sampleRecipe, xid))
+        assertArrayEquals(expected, XBloomRecipeEncoder.encodePayloadForCard(sampleRecipe, xid, signature))
     }
 
     @Test fun cardImagePreservesSignatureAndOnlyReplacesRecipeRegion() {
-        val original = ByteArray(160) { i -> if (i < 32) (i + 1).toByte() else 0 }
+        val original = ByteArray(160)
+        signature.copyInto(original, 0)
         val xid = byteArrayOf(0x54,0x48,0x30,0x30,0x33,0x35,0x00)
         xid.copyInto(original, 32)
         val updated = XBloomCardImage.applyRecipe(original, sampleRecipe)
-        assertArrayEquals(original.copyOfRange(0, 32), updated.copyOfRange(0, 32))
+        val payload = XBloomRecipeEncoder.encodePayloadForCard(sampleRecipe, xid, signature)
+        assertArrayEquals(signature, updated.copyOfRange(0, 32))
         assertEquals(original.size, updated.size)
-        assertArrayEquals(
-            XBloomRecipeEncoder.encodePayload(sampleRecipe, xid),
-            updated.copyOfRange(32, 32 + XBloomRecipeEncoder.encodePayload(sampleRecipe, xid).size),
-        )
+        assertArrayEquals(payload, updated.copyOfRange(32, 32 + payload.size))
     }
 
     private fun hex(s: String): ByteArray = s.trim().split(Regex("\\s+")).map { it.toInt(16).toByte() }.toByteArray()
