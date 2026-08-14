@@ -1,23 +1,27 @@
 package com.brewtap.xbloom
 
-import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
+import android.nfc.NfcAdapter
+import android.nfc.Tag
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
+import java.util.concurrent.Executors
 
-class MainActivity : Activity(), XBloomBleClient.Callback {
-    private val recipe = RecipeGenerator.edisonEthiopia()
-    private lateinit var ble: XBloomBleClient
+class MainActivity : Activity(), NfcAdapter.ReaderCallback {
+    private val io = Executors.newSingleThreadExecutor()
+    private var nfc: NfcAdapter? = null
     private lateinit var status: TextView
-    private lateinit var tapButton: Button
-    private lateinit var content: LinearLayout
+    private lateinit var dumpView: TextView
+    private lateinit var readButton: Button
+    private lateinit var copyButton: Button
+    private var lastDump: String = ""
 
     private val ivory = Color.rgb(246, 242, 233)
     private val ink = Color.rgb(23, 21, 18)
@@ -26,61 +30,8 @@ class MainActivity : Activity(), XBloomBleClient.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ble = XBloomBleClient(this)
-        setContentView(buildShell())
-        showHome()
-    }
-
-    private fun buildShell(): LinearLayout {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(ivory)
-        }
-        content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(42, 42, 42, 24)
-        }
-        root.addView(ScrollView(this).apply { addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(10, 10, 10, 20)
-        }
-        listOf("HOME", "RECIPES", "TAP", "SETTINGS").forEach { label ->
-            nav.addView(Button(this).apply {
-                text = label
-                textSize = if (label == "TAP") 14f else 11f
-                setTextColor(if (label == "TAP") Color.WHITE else ink)
-                background = rounded(if (label == "TAP") espresso else Color.TRANSPARENT, 48f)
-                setOnClickListener {
-                    when (label) {
-                        "HOME" -> showHome()
-                        "RECIPES" -> showRecipes()
-                        "TAP" -> armTap()
-                        else -> showSettings()
-                    }
-                }
-            }, LinearLayout.LayoutParams(0, 58, 1f).apply {
-                marginStart = 5
-                marginEnd = 5
-            })
-        }
-        root.addView(nav)
-        return root
-    }
-
-    private fun title(t: String, size: Float = 30f) = TextView(this).apply {
-        text = t
-        textSize = size
-        setTextColor(ink)
-        setTypeface(typeface, Typeface.BOLD)
-    }
-
-    private fun body(t: String, size: Float = 15f) = TextView(this).apply {
-        text = t
-        textSize = size
-        setTextColor(muted)
-        setLineSpacing(4f, 1f)
+        nfc = NfcAdapter.getDefaultAdapter(this)
+        setContentView(buildUi())
     }
 
     private fun rounded(color: Int, radius: Float) = GradientDrawable().apply {
@@ -88,123 +39,146 @@ class MainActivity : Activity(), XBloomBleClient.Callback {
         cornerRadius = radius
     }
 
-    private fun clear() {
-        ble.close()
-        content.removeAllViews()
-    }
+    private fun buildUi(): ScrollView {
+        val scroll = ScrollView(this).apply { setBackgroundColor(ivory) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(42, 42, 42, 60)
+        }
+        scroll.addView(root, ViewGroup.LayoutParams(-1, -2))
 
-    private fun showHome() {
-        clear()
-        content.addView(title("BrewTap", 34f))
-        content.addView(body("Smart recipes for xBloom", 16f).apply { setPadding(0, 4, 0, 28) })
+        root.addView(TextView(this).apply {
+            text = "BrewTap Card Lab"
+            textSize = 32f
+            setTextColor(ink)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        root.addView(TextView(this).apply {
+            text = "Read a real xBloom recipe card before we reverse the format. Read-only — this build never writes to the card."
+            textSize = 16f
+            setTextColor(muted)
+            setPadding(0, 8, 0, 28)
+        })
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 28, 28, 28)
-            background = rounded(Color.rgb(255, 253, 248), 32f)
+            setPadding(26, 26, 26, 26)
+            background = rounded(Color.rgb(255, 253, 248), 30f)
         }
-        card.addView(body("CURRENT COFFEE", 12f))
-        card.addView(title("EDISON Ethiopia", 26f).apply { setPadding(0, 6, 0, 2) })
-        card.addView(body("Medium / Light  ·  Berry  ·  Citrus  ·  Floral", 14f).apply { setPadding(0, 0, 0, 22) })
-        card.addView(title("18 g     270 ml", 25f))
-        card.addView(body("93°C     Grind 55 @ 80 RPM", 16f).apply { setPadding(0, 5, 0, 20) })
-        card.addView(body("Bloom 50 ml / 40s\n70 ml / 10s  ·  75 ml / 10s  ·  75 ml\nSpiral pour  ·  3.0–3.2 ml/s", 15f))
+        card.addView(TextView(this).apply {
+            text = "SAMPLE CARD INSPECTOR"
+            textSize = 12f
+            setTextColor(muted)
+        })
+        card.addView(TextView(this).apply {
+            text = "ISO15693 / NFC-V raw dump"
+            textSize = 23f
+            setTextColor(ink)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 8, 0, 8)
+        })
+        card.addView(TextView(this).apply {
+            text = "Reads UID, DSFID, AFI, block count, block size, and every memory block."
+            textSize = 15f
+            setTextColor(muted)
+            setPadding(0, 0, 0, 20)
+        })
 
-        tapButton = Button(this).apply {
-            text = "TAP TO xBLOOM"
+        readButton = Button(this).apply {
+            text = "READ xBLOOM CARD"
             textSize = 16f
             setTextColor(Color.WHITE)
             background = rounded(espresso, 40f)
-            setOnClickListener { armTap() }
+            setOnClickListener { startRead() }
         }
-        card.addView(tapButton, LinearLayout.LayoutParams(-1, 66).apply { topMargin = 26 })
-        content.addView(card, LinearLayout.LayoutParams(-1, -2))
+        card.addView(readButton, LinearLayout.LayoutParams(-1, 64))
 
-        status = body(
-            "Tap the button, then place your phone against the xBloom NFC area. BrewTap detects close-range Bluetooth signal and sends the selected recipe.",
-            14f,
-        ).apply { setPadding(6, 24, 6, 0) }
-        content.addView(status)
-    }
-
-    private fun showRecipes() {
-        clear()
-        content.addView(title("Recipes"))
-        content.addView(body("Your adaptive recipes", 16f).apply { setPadding(0, 4, 0, 24) })
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24, 24, 24, 24)
-            background = rounded(Color.WHITE, 28f)
+        copyButton = Button(this).apply {
+            text = "COPY RAW DUMP"
+            isEnabled = false
+            setOnClickListener { copyDump() }
         }
-        card.addView(title("EDISON Ethiopia", 22f))
-        card.addView(body("18g · 270ml · 93°C · Grind 55 · Spiral", 15f).apply { setPadding(0, 8, 0, 14) })
-        card.addView(Button(this).apply {
-            text = "USE & TAP"
-            setOnClickListener {
-                showHome()
-                armTap()
-            }
-        })
-        content.addView(card)
-        status = body("")
-        tapButton = Button(this)
-    }
+        card.addView(copyButton, LinearLayout.LayoutParams(-1, 58).apply { topMargin = 10 })
+        root.addView(card)
 
-    private fun showSettings() {
-        clear()
-        content.addView(title("Settings"))
-        content.addView(
-            body(
-                "BrewTap 1.1.1 experimental\n\nTap detection: close-range Bluetooth LE\nRecipe transport: direct xBloom BLE\nBrew start: physical xBloom Start button\n\nImportant: disconnect the official xBloom app before sending a recipe because the machine may allow only one BLE central connection at a time.",
-                15f,
-            ).apply { setPadding(0, 16, 0, 0) },
-        )
-        status = body("")
-        tapButton = Button(this)
-    }
-
-    private fun ensureBlePermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= 31) {
-            val needed = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-            if (needed.any { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) {
-                requestPermissions(needed, 77)
-                return false
-            }
+        status = TextView(this).apply {
+            text = if (nfc == null) "NFC is not available on this phone." else "Ready. Tap READ xBLOOM CARD, then hold the sample card to the phone."
+            textSize = 15f
+            setTextColor(muted)
+            setPadding(4, 24, 4, 16)
         }
-        return true
+        root.addView(status)
+
+        dumpView = TextView(this).apply {
+            text = "Raw card data will appear here."
+            textSize = 12f
+            setTextColor(ink)
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(18, 18, 18, 18)
+            background = rounded(Color.WHITE, 20f)
+        }
+        root.addView(dumpView, LinearLayout.LayoutParams(-1, -2))
+        return scroll
     }
 
-    private fun armTap() {
-        if (!::status.isInitialized) showHome()
-        if (!ensureBlePermission()) {
-            status.text = "Allow Nearby devices, then tap TAP TO xBLOOM again."
+    private fun startRead() {
+        val adapter = nfc
+        if (adapter == null) {
+            status.text = "NFC unavailable."
             return
         }
-        tapButton.isEnabled = false
-        status.text = "READY TO TAP\nPlace the phone against the xBloom NFC area…"
-        ble.sendRecipeWhenNear(recipe, this)
+        if (!adapter.isEnabled) {
+            status.text = "Turn NFC on, then try again."
+            return
+        }
+        readButton.isEnabled = false
+        status.text = "READY TO READ\nHold the real xBloom recipe card against the NFC area of your phone…"
+        adapter.enableReaderMode(
+            this,
+            this,
+            NfcAdapter.FLAG_READER_NFC_V or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
+            null,
+        )
     }
 
-    override fun onState(message: String) {
-        runOnUiThread { status.text = message }
-    }
-
-    override fun onLoaded(deviceName: String) {
-        runOnUiThread {
-            status.text = "✓ RECIPE SENT TO $deviceName\n\nCheck the recipe on xBloom, then press Start on the machine to brew."
-            tapButton.isEnabled = true
+    override fun onTagDiscovered(tag: Tag) {
+        io.execute {
+            val result = try {
+                NfcVCardInspector().read(tag).prettyHex()
+            } catch (e: Exception) {
+                "READ ERROR\n${e.javaClass.simpleName}: ${e.message ?: "unknown error"}"
+            }
+            runOnUiThread {
+                try { nfc?.disableReaderMode(this) } catch (_: Exception) {}
+                readButton.isEnabled = true
+                lastDump = result
+                dumpView.text = result
+                copyButton.isEnabled = result.startsWith("UID:")
+                status.text = if (result.startsWith("UID:")) {
+                    "✓ CARD READ COMPLETE\nTap COPY RAW DUMP and send the text back to me."
+                } else {
+                    "Card read failed. Keep the card steady and try again."
+                }
+            }
         }
     }
 
-    override fun onError(message: String) {
-        runOnUiThread {
-            status.text = "Could not send recipe.\n$message"
-            tapButton.isEnabled = true
-        }
+    private fun copyDump() {
+        if (lastDump.isBlank()) return
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("xBloom card raw dump", lastDump))
+        Toast.makeText(this, "Card dump copied", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { nfc?.disableReaderMode(this) } catch (_: Exception) {}
+        if (::readButton.isInitialized) readButton.isEnabled = true
     }
 
     override fun onDestroy() {
-        ble.close()
+        io.shutdownNow()
         super.onDestroy()
     }
 }
