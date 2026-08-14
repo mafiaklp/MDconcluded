@@ -14,7 +14,8 @@
         android:label="BrewTap"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="false" />
-        <activity android:name=".PremiumMainActivity" android:exported="true">
+        <activity android:name=".PremiumMainActivity" android:exported="false" />
+        <activity android:name=".BrewTapActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
