@@ -6,6 +6,18 @@ object XBloomRecipeEncoder {
     private const val GRIND_SIZE_OFFSET = 40
 
     fun encodePayload(recipe: BrewRecipe, xid: ByteArray): ByteArray {
+        val withoutCrc = encodeWithoutCrc(recipe, xid)
+        return withoutCrc + crc8Maxim(withoutCrc).toByte()
+    }
+
+    fun encodePayloadForCard(recipe: BrewRecipe, xid: ByteArray, signature: ByteArray): ByteArray {
+        require(signature.size == 32) { "xBloom card signature must be exactly 32 bytes" }
+        val withoutCrc = encodeWithoutCrc(recipe, xid)
+        val crc = crc8Maxim(signature + withoutCrc)
+        return withoutCrc + crc.toByte()
+    }
+
+    private fun encodeWithoutCrc(recipe: BrewRecipe, xid: ByteArray): ByteArray {
         require(xid.size == 7) { "xBloom XID must be exactly 7 bytes" }
         require(recipe.pours.isNotEmpty()) { "recipe must contain at least one pour" }
         require(recipe.pours.size <= 31) { "pour count exceeds card format" }
@@ -48,9 +60,6 @@ object XBloomRecipeEncoder {
 
         out.write(recipe.grindSize - GRIND_SIZE_OFFSET)
         out.write(recipe.machineRatio)
-
-        val withoutCrc = out.toByteArray()
-        out.write(crc8Maxim(withoutCrc))
         return out.toByteArray()
     }
 
