@@ -1,229 +1,160 @@
 # BrewTap Premium v1.1 Design
 
 ## Goal
-Transform the existing BrewTap xBloom NFC writer MVP into a modern, premium, useful Android app centered on fast recipe selection, NFC writing, verification, and easy self-updating through GitHub Releases.
+Transform BrewTap into a modern premium Android companion for xBloom Studio/J15 where the primary flow is: select a recipe → tap Send to xBloom → connect directly over BLE → load the recipe into the machine's Auto/Easy Mode slot A → user presses Start on the xBloom. Physical NFC recipe cards remain an optional legacy tool, not the main experience.
 
 ## Product principles
 - Premium but restrained: warm ivory surfaces, near-black typography, subtle depth, minimal accent color.
-- Utility first: the fastest path from opening the app to writing a selected xBloom recipe card should be two taps plus the NFC tap.
-- No decorative complexity that interferes with brewing.
-- Preserve the existing xBloom NFC-V writer behavior and read-back verification.
-- Keep app structure modular so AI recipe generation and taste feedback can be added later without rewriting NFC code.
+- Utility first: opening BrewTap to sending the selected recipe should require no more than two screen taps.
+- Direct machine integration is the core value; recipe-card writing is secondary.
+- Never start brewing automatically from the phone in v1.1. BrewTap loads the preset and the user physically starts the brew on xBloom.
+- BLE/network errors must never crash the app or corrupt local recipes.
 
 ## Navigation
-Use a persistent four-tab bottom navigation:
+Persistent bottom navigation:
 - HOME
 - RECIPES
-- SCAN (centered primary circular action)
+- SEND (large centered primary action)
 - SETTINGS
 
-SCAN is the most prominent control. Pressing it opens the NFC scan/write bottom sheet immediately using the currently selected recipe.
+SEND opens a premium bottom sheet and immediately begins xBloom BLE discovery after Android Bluetooth permission is available.
 
 ## Visual system
-### Colors
-- App background: warm ivory `#F6F2E9`
-- Primary text: near-black `#171512`
-- Secondary text: muted brown-gray `#746F67`
-- Card background: `#FFFDF8`
+- Background: warm ivory `#F6F2E9`
+- Primary text: `#171512`
+- Secondary text: `#746F67`
+- Card: `#FFFDF8`
 - Accent: deep espresso `#392B24`
-- Success: muted evergreen `#2F6B55`
-- Error: muted brick `#A74F44`
+- Success: `#2F6B55`
+- Error: `#A74F44`
+- Large rounded cards, subtle elevation, 20–28dp corner radius, concise motion.
+- Recipe values such as 18 g / 270 ml / 93°C / Grind 55 are visually dominant.
 
-### Typography
-- Large editorial-style display headings for greeting and section titles.
-- Clean sans-serif body text and UI labels.
-- Recipe numbers are visually dominant for quick scanning.
-- Avoid excessive all-caps except small utility labels and primary scan state labels.
+## Home
+Show BrewTap wordmark, time-based greeting, Current Coffee card, large `SEND TO xBLOOM` CTA, and recent recipes.
 
-### Components
-- Large rounded cards with subtle elevation.
-- 20–28 dp corner radius for primary surfaces.
-- Thin separators, minimal outlines.
-- Bottom sheets use large rounded top corners and occupy roughly 55–75% of screen height depending on state.
-- Motion: short fades/slides, no decorative looping animation.
-
-## Home screen
-Content order:
-1. BrewTap wordmark.
-2. Time-based greeting such as “Good evening.”
-3. Current Coffee card.
-4. Primary action: `BREW THIS RECIPE`.
-5. Recent recipes section.
-
-The Current Coffee card shows:
-- Coffee name
-- Origin / roast
-- Taste notes
-- Dose
-- Total water
-- Temperature
-- Grind size
-- Short recipe summary
-
-For the current EDISON recipe, the card displays:
+Default EDISON card:
 - EDISON Ethiopia
 - Medium / Light
 - Berry · Citrus · Floral
 - 18 g
 - 270 ml
 - 93°C
-- Grind 55
+- Grind 55 @ 80 RPM
 
-Tapping `BREW THIS RECIPE` sets the recipe as selected and opens the NFC scan sheet.
+## Recipes
+Local recipe library with selected-state indicator. v1.1 ships with EDISON Ethiopia and supports a data model for multiple recipes. Actions: Use, Edit, Duplicate, Delete.
 
-## Recipes screen
-Display recipes as premium list cards.
+## Direct xBloom send flow
+Primary state machine:
+1. `READY TO SEND`
+2. `SEARCHING FOR xBLOOM`
+3. `CONNECTING`
+4. `SYNCING RECIPE`
+5. `RECIPE LOADED ✓`
+6. Copy: `Press Start on your xBloom to brew.`
 
-Each recipe card includes:
-- Name
-- Origin / roast when available
-- Taste profile
-- Dose / water / temperature / grind
-- Selected indicator when active
+BLE transport is based on the independently reverse-engineered xBloom J15 protocol from `brAzzi64/xbloom-ble`, specifically:
+- advertiser name beginning with `XBLOOM`
+- command characteristic UUID `0000FFE1-0000-1000-8000-00805F9B34FB`
+- notification characteristic UUID `0000FFE2-0000-1000-8000-00805F9B34FB`
+- packet header `0x58`, CRC16 polynomial `0x8408`, initial value `0`
+- handshake command 8100 with `[185, 1]`
+- Auto/Easy Mode command 11511 with payload `91327856`
+- Easy Mode recipe slot write command 11510
 
-Recipe actions:
-- Use
-- Edit
-- Duplicate
-- Delete
+For v1.1, BrewTap writes the selected recipe to Auto/Easy Mode slot A (index 0), then switches the machine to Auto/Easy Mode. It does not send the Execute Recipe command. The physical Start action remains on the xBloom.
 
-For v1.1, EDISON Ethiopia is preloaded and remains the default selected recipe. Storage is local on-device. The data model must support multiple recipes even if only one preset ships initially.
-
-## NFC Scan experience
-Pressing the central SCAN tab or `BREW THIS RECIPE` opens a bottom sheet rather than navigating away.
-
-States:
-1. `READY TO SCAN`
-   - “Hold your xBloom recipe card to the NFC area of your phone.”
-   - Starts NFC-V reader mode immediately.
-2. `CARD DETECTED`
-3. `WRITING RECIPE`
-4. `VERIFYING`
-5. `READY TO BREW ✓`
+Recipe encoder must support:
+- 1–80 grinder size
+- 60–120 RPM
+- 40–98°C
+- center / circular / spiral pour pattern
+- 3.0–3.5 ml/s flow
+- per-pour volume and post-pour wait
+- vibration/agitation bits
+- ratio tail encoded as ratio × 10
 
 Failure states:
-- NFC unavailable
-- NFC disabled
-- Not an NFC-V card
-- Card removed too early
-- Read/write failed
-- Verification mismatch
+- Bluetooth unsupported
+- Bluetooth disabled
+- permission denied
+- xBloom not found
+- official xBloom app or another central already connected
+- GATT connection/service discovery failure
+- handshake timeout
+- recipe write failure
+- disconnected during sync
 
-Each failure offers `TRY AGAIN` and a close action.
+Every failure offers `TRY AGAIN`; brewing/recipe browsing remains usable.
 
-NFC behavior:
-- Use existing ISO15693 / NFC-V implementation.
-- Preserve the first 32 bytes/signature/hash area.
-- Preserve XID behavior as currently implemented.
-- Write only the recipe payload area.
-- Read back after writing and verify bytes before showing success.
-- Do not show success unless read-back verification passes.
+## Optional NFC proximity trigger
+If Android detects an NFC/NDEF tag on the xBloom machine while BrewTap is foreground and the tag matches a known xBloom URI/tag pattern, BrewTap may use that tap only as a trigger to open the SEND sheet. Recipe data still travels over BLE. Until the exact machine NFC payload is validated on the user's unit, NFC proximity is optional and BLE SEND remains fully usable from the center button.
 
-## Settings screen
-Sections:
+## Settings
+### Machine
+- Last xBloom device name/address
+- Connection status
+- Firmware/status when available
+- Forget saved machine
+
 ### Brewing defaults
 - Default dose
 - Preferred ratio
-- Default xBloom model label
-
-### NFC diagnostics
-- NFC available
-- NFC enabled
-- Last card UID
-- Last write verification result
+- Default cup/dripper type
 
 ### App
 - Current version
 - Check for updates
-- Latest version status
-- Open release notes
+- Latest release status
+- Release notes
 
 ## Update system
-Use GitHub Releases for v1.1.
-
-### Release flow
-A version tag such as `v1.1.0` triggers GitHub Actions to:
-1. Run unit tests.
-2. Build the Android APK.
-3. Create a GitHub Release.
-4. Attach the APK to the release.
-
-### In-app update check
-The app checks the latest GitHub Release:
-- once at app start when network is available, but no more than once every 24 hours automatically;
-- whenever the user presses `Check for updates`.
-
-If a newer semantic version exists, show a premium update sheet:
-- `BrewTap 1.2.0 is ready`
-- short release notes
-- `UPDATE NOW`
-- `LATER`
-
-`UPDATE NOW` opens the release APK download in the browser/download manager. Android still performs the final install confirmation; the app must not attempt silent installation.
-
-Update-check failures must not block brewing or NFC writing.
+GitHub Releases is the v1.1 update channel. A version tag runs tests, builds APK, creates a Release and attaches the APK. The app checks latest Release no more than once per 24h automatically and on-demand in Settings. `UPDATE NOW` opens the APK download; Android retains final install confirmation. Update failures never block brewing.
 
 ## Architecture
-Split responsibilities instead of expanding the current MainActivity.
-
-Suggested modules/classes:
-- `MainActivity` — application shell and navigation host only.
-- `HomeScreen` — greeting and selected recipe summary.
-- `RecipesScreen` — recipe browsing and selection.
-- `ScanSheet` — NFC workflow UI/state presentation.
-- `SettingsScreen` — preferences, NFC diagnostics, update controls.
-- `RecipeRepository` — local recipe persistence and selected recipe state.
-- `RecipeGenerator` — existing preset generation, later AI integration point.
-- `NfcVCardWriter` — existing NFC-V writing logic; keep protocol logic isolated.
-- `NfcWriteCoordinator` — maps NFC operations to scan sheet states.
-- `UpdateManager` — GitHub Release lookup, semantic-version comparison, update metadata.
-- `AppPreferences` — last update check, defaults, diagnostics.
+- `MainActivity` — premium shell + bottom navigation host.
+- `RecipeModels` / `RecipeGenerator` — recipe model and presets.
+- `RecipeRepository` — local recipe persistence and selected recipe.
+- `XBloomBleProtocol` — pure Kotlin packet builders, CRC16, recipe encoder, slot packet.
+- `XBloomBleClient` — Android BLE scan/connect/GATT/handshake/write lifecycle.
+- `SendCoordinator` — UI-independent send state machine.
+- `UpdateManager` — semantic version + GitHub Release lookup.
+- Legacy `NfcVCardWriter` remains available but is not in the primary navigation flow.
 
 ## Data flow
-### Brewing
-Selected recipe → Scan action → NfcWriteCoordinator → NfcVCardWriter → read-back verification → success/failure state.
-
-### Recipe selection
-RecipesScreen → RecipeRepository.setSelectedRecipe() → Home reflects selected recipe immediately.
-
-### Update check
-App start/settings → UpdateManager → GitHub latest release metadata → semantic version compare → update sheet if newer.
-
-## Error handling
-- NFC errors never crash the app.
-- Update/network errors are non-blocking and appear only as concise status messages.
-- Recipe validation occurs before NFC writing begins.
-- A recipe with invalid total water/pour totals cannot be written.
-- Verification mismatch is treated as failure even if the write calls returned successfully.
+Selected recipe → SEND → BLE scan → connect → discover GATT → subscribe/handshake → encode slot A → send slot packet → send Auto/Easy Mode packet → success UI → user presses Start on xBloom.
 
 ## Testing
 Unit tests must cover:
-- EDISON preset values.
-- recipe validation and pour totals.
-- NFC payload encoding.
-- CRC behavior.
-- semantic version comparison.
-- update decision logic.
-- scan state transitions independent of Android NFC hardware where possible.
+- EDISON preset
+- recipe validation and pour totals
+- CRC16 known vectors
+- type1/type2 packet framing
+- recipe BLE encoding
+- Easy Mode slot A packet
+- semantic version comparison
+- send-state transitions
 
-GitHub Actions must run tests before building the APK.
+CI must run unit tests before building APK.
 
-Manual acceptance test on Samsung Android device:
-1. Install APK.
-2. Navigate all four tabs.
-3. Select EDISON recipe.
-4. Open SCAN.
-5. Write a genuine xBloom NFC-V card.
-6. Confirm read-back verification succeeds.
-7. Tap card on xBloom and confirm recipe settings load.
-8. Confirm update checker does not interrupt use when offline.
+## Manual acceptance on Samsung
+1. Install APK and grant Nearby devices permission.
+2. Disconnect the official xBloom app from the machine.
+3. Navigate all four tabs.
+4. Select EDISON Ethiopia.
+5. Tap SEND TO xBLOOM.
+6. Confirm BrewTap discovers and connects to the machine.
+7. Confirm recipe sync reports success.
+8. Confirm xBloom is in Auto/Easy Mode with the recipe loaded to slot A.
+9. Press Start on xBloom and verify the expected grind/brew preset.
+10. Confirm offline/update-check failure never blocks SEND.
 
-## v1.1 scope exclusions
-- Direct phone-to-xBloom ISO15693 card emulation.
-- Cloud accounts / login.
+## v1.1 exclusions
+- Silent auto-start brew from BrewTap.
+- Guaranteed NFC-tap trigger before the machine's NFC payload is captured and validated.
+- Cloud accounts/login.
 - Google Play distribution.
 - Silent APK installation.
-- Camera-based coffee recognition.
-- AI taste tuner implementation.
-
-These can follow after the premium shell, recipe library, NFC workflow, and update channel are proven stable.
+- Camera coffee recognition.
+- AI taste tuner.
