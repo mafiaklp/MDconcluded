@@ -249,7 +249,7 @@ class PremiumMainActivity : Activity() {
 
     private fun showDetail() {
         val p = profile ?: return showAddCoffee()
-        val current = if (mode == BrewMode.HOT) hot else iced ?: return
+        val current = (if (mode == BrewMode.HOT) hot else iced) ?: return
         selected = current
         val (scroll, body) = root(p.name, listOf(p.country, p.process, p.roastLevel.name.replace('_', ' ')).filter { it.isNotBlank() && it != "UNKNOWN" }.joinToString("  •  "))
 
