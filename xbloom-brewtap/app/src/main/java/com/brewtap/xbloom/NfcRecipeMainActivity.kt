@@ -2,16 +2,21 @@ package com.brewtap.xbloom
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
-import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.*
 import com.brewtap.xbloom.domain.*
+import com.brewtap.xbloom.photo.AnalyzedCoffeeDraft
+import com.brewtap.xbloom.photo.CoffeeBagAnalyzer
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.concurrent.Executors
 
 class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
@@ -33,6 +38,8 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
     private var mode = BrewMode.HOT
     private var waitingForCard = false
     private var statusView: TextView? = null
+
+    companion object { private const val PICK_IMAGE = 501 }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,12 +75,13 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     private fun showHome() {
-        val (scroll, body) = page("Smart recipes.", "Build Hot + Iced recipes, then write them to an xBloom-compatible NFC-V recipe card.")
+        val (scroll, body) = page("Smart recipes.", "Scan a coffee bag or enter it manually, generate Hot + Iced, then write the selected recipe to an xBloom-compatible NFC-V card.")
         body.addView(card().apply {
-            addView(text("NFC-FIRST WORKFLOW", 11f, copper, true))
-            addView(text("Coffee → recipe → card → xBloom", 25f, ink, true).apply { setPadding(0, dp(9), 0, dp(7)) })
-            addView(text("No Bluetooth machine control. BrewTap encodes the same ISO15693/NFC-V recipe structure reverse-engineered from real xBloom cards.", 14f, muted))
-            addView(button("Create a coffee", true) { showCoffeeForm() }, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(18) })
+            addView(text("SMART RECIPE ENGINE", 11f, copper, true))
+            addView(text("Coffee → Hot / Iced → NFC card", 25f, ink, true).apply { setPadding(0, dp(9), 0, dp(7)) })
+            addView(text("Photo AI and manual entry use the same editable coffee profile. Default dose starts at 15 g but every recipe can change it.", 14f, muted))
+            addView(button("Scan coffee bag", true) { pickImage() }, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(18) })
+            addView(button("Enter coffee manually", false) { showCoffeeForm() }, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(9) })
         })
         profile?.let { p ->
             body.addView(card().apply {
@@ -91,21 +99,33 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
         if (numeric) inputType = android.text.InputType.TYPE_CLASS_NUMBER
     }
 
-    private fun showCoffeeForm() {
-        val (scroll, body) = page("New coffee", "Enter the bag profile. Recommended dose starts at 15 g but remains recipe-specific.")
+    private fun showCoffeeForm(draft: AnalyzedCoffeeDraft? = null) {
+        val (scroll, body) = page("New coffee", "Scan the bag or enter the profile yourself. Review the extracted data before generating recipes.")
+
+        body.addView(card().apply {
+            addView(text("PHOTO AI", 11f, copper, true))
+            addView(text(if (draft == null) "Read the coffee bag" else "Bag scan complete", 22f, ink, true).apply { setPadding(0, dp(8), 0, dp(5)) })
+            addView(text(if (draft == null) "OCR reads what it can; all fields remain editable." else "Review and correct the extracted profile, then generate Hot + Iced.", 14f, muted))
+            addView(button(if (draft == null) "Scan coffee bag" else "Scan another bag", true) { pickImage() }, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(14) })
+        })
+
         val form = card()
-        val name = field("Coffee name")
-        val origin = field("Country / origin")
-        val process = field("Process — washed, natural, anaerobic…")
-        val notes = field("Tasting notes — comma separated")
-        val altitude = field("Altitude (m)", numeric = true)
+        form.addView(text("COFFEE PROFILE", 11f, copper, true))
+        form.addView(text("Recipe inputs", 22f, ink, true).apply { setPadding(0, dp(8), 0, dp(14)) })
+        val name = field("Coffee name", draft?.name.orEmpty())
+        val origin = field("Country / origin", draft?.country.orEmpty())
+        val process = field("Process — washed, natural, anaerobic…", draft?.process.orEmpty())
+        val notes = field("Tasting notes — comma separated", draft?.tastingNotes?.joinToString(", ").orEmpty())
+        val altitude = field("Altitude (m)", draft?.altitudeM?.toString().orEmpty(), true)
         val dose = field("Dose (g)", "15", true)
         listOf(name, origin, process, notes, altitude, dose).forEach { form.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }) }
 
         form.addView(text("ROAST LEVEL", 11f, muted, true).apply { setPadding(dp(2), dp(4), 0, dp(6)) })
+        val roastValues = RoastLevel.values()
         val roast = Spinner(this).apply {
-            adapter = ArrayAdapter(this@NfcRecipeMainActivity, android.R.layout.simple_spinner_dropdown_item, RoastLevel.values().map { it.name.replace('_',' ') })
-            setSelection(RoastLevel.values().indexOf(RoastLevel.MEDIUM_LIGHT))
+            adapter = ArrayAdapter(this@NfcRecipeMainActivity, android.R.layout.simple_spinner_dropdown_item, roastValues.map { it.name.replace('_',' ') })
+            val wanted = draft?.roastLevel ?: RoastLevel.MEDIUM_LIGHT
+            setSelection(roastValues.indexOf(wanted).coerceAtLeast(0))
             background = rounded(Color.WHITE, 16, true); minimumHeight = dp(56)
         }
         form.addView(roast, LinearLayout.LayoutParams(-1, dp(56)))
@@ -115,18 +135,41 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
             val p = CoffeeProfile(
                 name = name.text.toString().trim().ifBlank { "Untitled coffee" },
                 country = origin.text.toString().trim(), process = process.text.toString().trim(),
-                roastLevel = RoastLevel.values()[roast.selectedItemPosition],
-                altitudeM = altitude.text.toString().toIntOrNull(),
+                roastLevel = roastValues[roast.selectedItemPosition], altitudeM = altitude.text.toString().toIntOrNull(),
                 tastingNotes = notes.text.toString().split(',').map { it.trim() }.filter { it.isNotBlank() },
-                source = CoffeeSource.MANUAL,
+                source = if (draft == null) CoffeeSource.MANUAL else CoffeeSource.PHOTO,
             )
+            if (!p.isGeneratable()) { Toast.makeText(this, "Add coffee name plus useful origin, process, roast or tasting-note information.", Toast.LENGTH_LONG).show(); return@button }
             profile = p
             hot = SmartRecipeEngine.generate(p, RecipeIntent(BrewMode.HOT, doseGrams = grams))
             iced = SmartRecipeEngine.generate(p, RecipeIntent(BrewMode.ICED, doseGrams = grams))
             mode = BrewMode.HOT; selected = hot; showRecipe()
         }, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(16) })
-        body.addView(form)
+        body.addView(form, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
         setContentView(scroll)
+    }
+
+    private fun pickImage() {
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "image/*"
+        }, PICK_IMAGE)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data?.data == null) return
+        Toast.makeText(this, "Reading coffee bag…", Toast.LENGTH_SHORT).show()
+        val image = runCatching { InputImage.fromFilePath(this, data.data!!) }.getOrElse {
+            Toast.makeText(this, "Could not open that image.", Toast.LENGTH_LONG).show(); showCoffeeForm(); return
+        }
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image)
+            .addOnSuccessListener { result ->
+                val draft = CoffeeBagAnalyzer.analyze(result.text)
+                showCoffeeForm(draft)
+            }
+            .addOnFailureListener { err ->
+                Toast.makeText(this, "Bag scan failed: ${err.message ?: "OCR error"}", Toast.LENGTH_LONG).show(); showCoffeeForm()
+            }
     }
 
     private fun showRecipe() {
@@ -165,24 +208,18 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
     private fun showWriteCard() {
         val g = selected ?: return showRecipe()
         val (scroll, body) = page("Write recipe card", "Write the generated recipe to a reusable xBloom-compatible ISO15693/NFC-V card.")
-        val payloadPreview = runCatching {
-            val placeholderXid = byteArrayOf(0x54,0x48,0x30,0x30,0x30,0x30,0x00)
-            XBloomRecipeEncoder.encodePayload(g.recipe, placeholderXid)
-        }
         val c = card().apply {
             addView(text("READY TO WRITE", 11f, copper, true))
             addView(text(g.recipe.name, 22f, ink, true).apply { setPadding(0, dp(8), 0, dp(6)) })
             addView(text("${g.recipe.doseGrams} g · ${g.recipe.totalWaterMl} g · Grind ${g.recipe.grindSize}", 15f, muted))
-            addView(text(if (payloadPreview.isSuccess) "✓ Recipe format validated · CRC 0x%02X".format(payloadPreview.getOrThrow().last().toInt() and 0xFF) else "Encoder error: ${payloadPreview.exceptionOrNull()?.message}", 14f, if (payloadPreview.isSuccess) ink else Color.RED, true).apply { setPadding(0, dp(16), 0, 0) })
-            addView(text("The card must already be xBloom-compatible. BrewTap preserves its first 32 signature bytes and its XID, then replaces only the recipe region and verifies the write.", 13f, muted).apply { setPadding(0, dp(10), 0, 0) })
+            addView(text("BrewTap preserves the card signature/XID, replaces only the recipe area and verifies the written bytes before reporting success.", 13f, muted).apply { setPadding(0, dp(12), 0, 0) })
             val status = text("Tap WRITE, then hold the NFC-V card against the phone.", 14f, muted).apply { setPadding(0, dp(16), 0, 0) }
             statusView = status
             addView(button("WRITE TO xBLOOM NFC CARD", true) { armWriter(status) }, LinearLayout.LayoutParams(-1, dp(60)).apply { topMargin = dp(16) })
             addView(status)
             addView(button("Back to recipe", false) { showRecipe() }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
         }
-        body.addView(c)
-        setContentView(scroll)
+        body.addView(c); setContentView(scroll)
     }
 
     private fun armWriter(status: TextView) {
@@ -206,8 +243,7 @@ class NfcRecipeMainActivity : Activity(), NfcAdapter.ReaderCallback {
                     onSuccess = { "✓ WRITTEN & VERIFIED — ${it.verifiedBytes} recipe bytes. Now tap this card on xBloom." },
                     onFailure = { "Write failed: ${it.message ?: it.javaClass.simpleName}" },
                 )
-                statusView?.text = msg
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                statusView?.text = msg; Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             }
         }
     }
